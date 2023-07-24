@@ -1,0 +1,11 @@
+{
+    "configurations": [
+        {
+            "name": "C#: LibObjectFile.CodeGen",
+            "type": "dotnet",
+            "request": "launch",
+            "projectPath": "${workspaceFolder}\\src\\LibObjectFile.CodeGen\\LibObjectFile.CodeGen.csproj",
+            "launchConfigurationId": "TargetFramework=;LibObjectFile.CodeGen"
+        }
+    ]
+}

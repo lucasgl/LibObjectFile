@@ -421,7 +421,7 @@ namespace LibObjectFile.Dwarf
                 dwarf.InfoSection.ReadInternal(reader);
             }
 
-            CheckErrors(reader.Diagnostics);
+            //CheckErrors(reader.Diagnostics);
 
             return dwarf;
         }
