@@ -367,6 +367,21 @@ namespace LibObjectFile.Tests.Dwarf
             PrintStreamLength(outputContext);
         }
 
+        [Test]
+        public void ReadOutFile() {
+            using var inStream = File.OpenRead("TestFiles/Hill_ACU_D.out");
+            ElfObjectFile.TryRead(inStream, out ElfObjectFile elf, out DiagnosticBag bag);
+            Console.WriteLine("Not Exploded");
+
+            var elfContext = new DwarfElfContext(elf);
+            var inputContext = new DwarfReaderContext(elfContext);
+            var dwarf = DwarfFile.Read(inputContext);
+
+            dwarf.AbbreviationTable.Print(Console.Out);
+            dwarf.InfoSection.Print(Console.Out);
+            dwarf.AddressRangeTable.Print(Console.Out);
+        }
+
 
         [Test]
         public void CreateDwarf()
