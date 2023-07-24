@@ -105,9 +105,11 @@ namespace LibObjectFile.Dwarf
         {
             var log = reader.Log;
             var startOfSection = reader.Offset;
-
+            if((reader.Stream.Length - reader.Stream.Position) < 6) {
+                reader.Stream.Position = reader.Stream.Length; //end the stream.
+                return; //this is not a valid line block.
+            }
             reader.OffsetToLineProgramTable.Add(startOfSection, this);
-
             var unitLength = reader.ReadUnitLength();
             Is64BitEncoding = reader.Is64BitEncoding;
             AddressSize = reader.AddressSize;
