@@ -4,6 +4,7 @@
 
 using System;
 using System.IO;
+using System.Linq;
 using LibObjectFile.Dwarf;
 using LibObjectFile.Elf;
 using NUnit.Framework;
@@ -368,18 +369,68 @@ namespace LibObjectFile.Tests.Dwarf
         }
 
         [Test]
+        public void FlatAllVariables()
+        {
+            using var inStream = File.OpenRead("TestFiles/Hill_ACU_D.out");
+            ElfObjectFile.TryRead(inStream, out ElfObjectFile elf, out DiagnosticBag bag);
+
+            var symbolTable = elf.Sections.FirstOrDefault(s => s is ElfSymbolTable) as ElfSymbolTable;
+            var objectSymbols = symbolTable.Entries.Where(e => e.Type == ElfSymbolType.Object);
+            
+            using TextWriter textWriter1 = new StreamWriter("varSymbols.txt");
+            foreach (var symbol in objectSymbols.OrderBy(i => i.Name.Value)){
+                textWriter1.WriteLine($"{symbol.Value:x16} {symbol.Size,5} {symbol.Name.Value}");
+            }
+            var dwarf = DwarfFile.ReadFromElf(elf);
+            var compilationDIES = dwarf.InfoSection.Units
+                .Where(unit => unit.Root != null && unit.Root.Children.Count > 0)
+                .Select(unit => unit.Root);
+
+            using TextWriter textWriter2 = new StreamWriter("varDefs.csv");
+            textWriter2.WriteLine($"File Name, Variable Name, Variable Type, Offset");
+            foreach (var compilationDIE in compilationDIES) {
+                foreach(var variableDIE in compilationDIE.Children.Where(die => die.Tag.Equals(DwarfTagEx.Variable)))    
+                {
+                    var fileName = Path.GetFileName(compilationDIE.FindAttributeByKey(DwarfAttributeKind.Name).ValueAsObject.ToString());
+                    var name = variableDIE.FindAttributeByKey(DwarfAttributeKind.Name).ValueAsObject.ToString();
+                    var typeRef = variableDIE.FindAttributeByKey(DwarfAttributeKind.Type).ValueAsObject as DwarfDIE;
+                    var typeName = (typeRef.FindAttributeByKey(DwarfAttributeKind.Name)?.ValueAsObject.ToString()) ?? typeRef.Tag.ToString();
+                    textWriter2.WriteLine($"{fileName},{name},{typeName},\"{objectSymbols.FirstOrDefault(i => i.Name.Value == name).Value:X8}\"");
+                }
+            }
+            var variableDIES = dwarf.InfoSection.Units
+                .Where(unit => unit.Root != null && unit.Root.Children.Count > 0)
+                .Select(unit => unit.Root.Children[0]) //get first children as variables are at the first level in the DIE tree
+                .Where(die => die.Tag.Equals(DwarfTagEx.Variable));
+
+            var typedefDIES = dwarf.InfoSection.Units
+                .Where(unit => unit.Root != null)
+                .Select(unit => unit.Root)
+                .SelectMany(root => root.Children)
+                .Where(root => root.Tag.Equals(DwarfTagEx.Variable));
+
+            using TextWriter textWriter = new StreamWriter("variables.txt");
+            foreach (var unit in variableDIES) {
+                unit.Print(textWriter);
+            }
+
+        }
+
+        [Test]
         public void ReadOutFile() {
             using var inStream = File.OpenRead("TestFiles/Hill_ACU_D.out");
             ElfObjectFile.TryRead(inStream, out ElfObjectFile elf, out DiagnosticBag bag);
-            Console.WriteLine("Not Exploded");
+            var dwarf = DwarfFile.ReadFromElf(elf);
+            
+            using (TextWriter textWriter = new StreamWriter("elf.txt"))
+                elf.Print(textWriter);
+            //dwarf.AbbreviationTable.Print(textWriter);
+            using (TextWriter textWriter = new StreamWriter("dwarf.txt"))
+                dwarf.InfoSection.Print(textWriter);
 
-            var elfContext = new DwarfElfContext(elf);
-            var inputContext = new DwarfReaderContext(elfContext);
-            var dwarf = DwarfFile.Read(inputContext);
-
-            dwarf.AbbreviationTable.Print(Console.Out);
-            dwarf.InfoSection.Print(Console.Out);
-            dwarf.AddressRangeTable.Print(Console.Out);
+            
+            //dwarf.InfoSection.PrintRelocations(textWriter);
+            //dwarf.AddressRangeTable.Print(textWriter);
         }
 
 
