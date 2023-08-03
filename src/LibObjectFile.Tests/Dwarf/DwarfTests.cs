@@ -3,6 +3,7 @@
 // See the license.txt file in the project root for more information.
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using LibObjectFile.Dwarf;
@@ -368,6 +369,181 @@ namespace LibObjectFile.Tests.Dwarf
             PrintStreamLength(outputContext);
         }
 
+        Dictionary<String,DATATYPE_TYPE> baseDataTypes = new () {
+            // {"uint8",DATATYPE_TYPE.UINT8},
+            // {"uint16",DATATYPE_TYPE.UINT16},
+            // {"uint32",DATATYPE_TYPE.UINT32},
+            // {"uint64",DATATYPE_TYPE.UINT64},
+            // {"sint8",DATATYPE_TYPE.SINT8},
+            // {"sint16",DATATYPE_TYPE.SINT16},
+            // {"sint32",DATATYPE_TYPE.SINT32},
+            // {"sint64",DATATYPE_TYPE.SINT64},
+            {"unsigned char",DATATYPE_TYPE.UINT8},
+            {"unsigned short int",DATATYPE_TYPE.UINT16},
+            {"unsigned short",DATATYPE_TYPE.UINT16},
+            {"unsigned long int",DATATYPE_TYPE.UINT32},
+            {"unsigned int",DATATYPE_TYPE.UINT32},
+            {"unsigned long long",DATATYPE_TYPE.UINT64},
+            {"unsigned long",DATATYPE_TYPE.UINT64},
+            {"signed char",DATATYPE_TYPE.SINT8},
+            {"char",DATATYPE_TYPE.SINT8},
+            {"signed short int",DATATYPE_TYPE.SINT16},
+            {"signed short",DATATYPE_TYPE.SINT16},
+            {"short",DATATYPE_TYPE.SINT16},
+            {"signed long int",DATATYPE_TYPE.SINT32},
+            {"signed int",DATATYPE_TYPE.SINT32},
+            {"int",DATATYPE_TYPE.SINT32},
+            {"signed long long",DATATYPE_TYPE.SINT64},
+            {"signed long",DATATYPE_TYPE.SINT64},
+            {"long",DATATYPE_TYPE.SINT64},
+            {"float",DATATYPE_TYPE.FLOAT32},
+            {"double",DATATYPE_TYPE.FLOAT64},
+            {"void",DATATYPE_TYPE.INVALID},
+            {"BOOL_TYPE",DATATYPE_TYPE.UINT8},
+            {"ON_OFF_TYPE",DATATYPE_TYPE.UINT8},
+            {"PASS_FAIL_TYPE",DATATYPE_TYPE.UINT8},
+            {"COMPLETE_TYPE",DATATYPE_TYPE.UINT8},
+            {"ACTIVE_TYPE",DATATYPE_TYPE.UINT8},
+        };
+        
+        // unsigned char       uint8;
+        // typedef unsigned short int  uint16;
+        // typedef unsigned long int   uint32;
+        // typedef unsigned long long  uint64;
+
+        // typedef signed char         sint8;
+        // typedef signed short int    sint16;
+        // typedef signed long int     sint32;
+        // typedef signed long long    sint64;
+
+        // typedef float               float32;
+        // typedef double              float64;
+
+        enum DATATYPE_TYPE
+        {
+            INVALID = 0,   //!< DATATYPE_INVALID
+            UINT8,         //!< DATATYPE_UINT8
+            UINT16,        //!< DATATYPE_UINT16
+            UINT32,        //!< DATATYPE_UINT32
+            UINT64,        //!< DATATYPE_UINT64
+            SINT8,         //!< DATATYPE_SINT8
+            SINT16,        //!< DATATYPE_SINT16
+            SINT32,        //!< DATATYPE_SINT32
+            SINT64,        //!< DATATYPE_SINT64
+            FLOAT32,       //!< DATATYPE_FLOAT32
+            FLOAT64,       //!< DATATYPE_FLOAT64
+            IS_ARRAY,      //!< DATATYPE_IS_ARRAY Use this type if you want to extern an array. Receiver will need to understand what this array is.
+            IS_REGULATION,  //!< DATATYPE_IS_REGULATION Use this type to extern the Regulation array.
+            IS_Q15_CELSIUS //!< DATATYPE_IS_Q15_CELSIUS is the special type of SINT16 to represent temperatures in celsius on the Q15 format.
+        };
+
+        record VariableEntry(string FileName, string Name, string TagType, string TypeName, ulong Offset) 
+        {
+            public override string ToString() => $"{FileName},{Name},{TagType},{TypeName},{Offset:X8}";
+        }
+
+        DwarfDIE NavigateToBaseType(DwarfDIE die, int level = 0) {            
+            var foundBaseType = 
+                            die.Tag.Equals(DwarfTag.PointerType) ||
+                            die.Tag.Equals(DwarfTag.UnionType) ||
+                            die.Tag.Equals(DwarfTag.SubroutineType) ||
+                            die.Tag.Equals(DwarfTag.BaseType) ||
+                            die.Tag.Equals(DwarfTag.StructureType);
+            if(foundBaseType) return die;
+
+            if (die.FindAttributeByKey(DwarfAttributeKind.Type)?.ValueAsObject is not DwarfDIE typeRef) 
+                throw new NullReferenceException($"{die.Tag} does not contain Type attribute");
+            return NavigateToBaseType(typeRef, level + 1);
+        }
+
+        /// <summary>
+        /// Find the first reference type that contains byte size.
+        /// </summary>
+        /// <param name="die"></param>
+        /// <returns></returns>
+        /// <exception cref="NullReferenceException"></exception>
+        DwarfDIE NavigateToByteSizeableType(DwarfDIE die) 
+        {
+            if(die.Tag.Equals(DwarfTag.PointerType)) return die; //if pointer return itself so user can decide the size.
+            var foundBaseType = die.FindAttributeByKey(DwarfAttributeKind.ByteSize) is not null;
+            if(foundBaseType) return die;
+
+            if (die.FindAttributeByKey(DwarfAttributeKind.Type)?.ValueAsObject is not DwarfDIE typeRef) 
+                return die; //found the last type in the chain that does not reference another type.
+            return NavigateToByteSizeableType(typeRef);
+        }
+
+        List<(string, DwarfDIE, ulong)> GetStructureMembers(DwarfDIE die, string parentMemberName, ulong offset, List<(string, DwarfDIE, ulong)> members = null) {            
+            if(!die.Tag.Equals(DwarfTag.StructureType) && !die.Tag.Equals(DwarfTag.UnionType)) 
+                throw new ArgumentException($"{die.Tag} is not a Structure or Union Type", nameof(die));
+            members ??= new List<(string,DwarfDIE, ulong)>();
+            uint memberBitSize = 0;
+            uint byteSize = 0;
+            uint? previousBitsize = null;
+            foreach(var member in die.Children) 
+            {
+                if(!member.Tag.Equals(DwarfTag.Member)) throw new Exception("Struct have invalid Children. All Children must be Members Tag Types.");
+                uint? bitsize = member.FindAttributeByKey(DwarfAttributeKind.BitSize)?.ValueAsU32;
+                //Fix bad structured bitmap.
+                if(memberBitSize > 0 && memberBitSize < (byteSize*8)) 
+                {                    
+                    if (
+                        //previous bitmap never reached type size;
+                        (!bitsize.HasValue && previousBitsize.HasValue) ||
+                        //new bitmap overflow type size, it will be allocated in a new position.
+                       (bitsize.HasValue && (bitsize.Value + memberBitSize > byteSize*8))
+                    )
+                    {
+                        memberBitSize = 0;
+                        offset += byteSize;
+                    }
+                }
+                previousBitsize = bitsize;
+                var rootType = member.FindAttributeByKey(DwarfAttributeKind.Type).ValueAsObject as DwarfDIE;
+                var typeRef = NavigateToBaseType(rootType);
+                var isPointerType = typeRef.Tag.Equals(DwarfTag.PointerType);
+                var isArrayType = rootType.Tag.Equals(DwarfTag.ArrayType);
+                uint upperBound = 0;
+                if(isArrayType) upperBound = rootType.Children[0].FindAttributeByKey(DwarfAttributeKind.UpperBound).ValueAsU32 + 1;
+                var memberName = $"{parentMemberName}.{member.FindAttributeByKey(DwarfAttributeKind.Name)?.ValueAsObject??"unnamed"}{(bitsize.HasValue?(":"+bitsize):"")}{(isPointerType ? "*":"")}{(isArrayType ? "["+upperBound+"]":"")}";
+                if(typeRef != die && (typeRef.Tag.Equals(DwarfTag.StructureType) || typeRef.Tag.Equals(DwarfTag.UnionType)))
+                {
+                    GetStructureMembers(typeRef, memberName, offset, members);
+                }
+                else 
+                {
+                    members.Add((memberName, typeRef, offset));
+                }
+                bool updateOffset = member.Parent is not DwarfDIEUnionType;
+                byteSize = GetByteSize(rootType); //update the bytesize of the current member.
+
+                if(bitsize.HasValue)
+                {
+                    updateOffset = false;
+                    memberBitSize += bitsize.Value;
+                    if(memberBitSize >= (byteSize*8))
+                        updateOffset = true;
+                }
+                
+                if(updateOffset) 
+                {
+                    memberBitSize = 0;
+                    offset += byteSize;
+                }
+            }
+            return members;    
+        }
+
+        uint GetByteSize(DwarfDIE die) 
+        {
+            var typeSize = NavigateToByteSizeableType(die).FindAttributeByKey(DwarfAttributeKind.ByteSize)?.ValueAsU32 ?? 4; //subrotine or pointer would not contain bytesize, and we default to 4 as size of 32bits address.
+            if(die is DwarfDIEArrayType) {
+                return (die.Children[0].FindAttributeByKey(DwarfAttributeKind.UpperBound).ValueAsU32 + 1) * typeSize;
+            }
+
+            return typeSize;
+        }
+
         [Test]
         public void FlatAllVariables()
         {
@@ -387,15 +563,35 @@ namespace LibObjectFile.Tests.Dwarf
                 .Select(unit => unit.Root);
 
             using TextWriter textWriter2 = new StreamWriter("varDefs.csv");
-            textWriter2.WriteLine($"File Name, Variable Name, Variable Type, Offset");
+            textWriter2.WriteLine($"File Name, Variable Name, Tag Type, Type Name, Offset");
             foreach (var compilationDIE in compilationDIES) {
                 foreach(var variableDIE in compilationDIE.Children.Where(die => die.Tag.Equals(DwarfTagEx.Variable)))    
                 {
+                    List<VariableEntry> variableList = new();                    
                     var fileName = Path.GetFileName(compilationDIE.FindAttributeByKey(DwarfAttributeKind.Name).ValueAsObject.ToString());
+
                     var name = variableDIE.FindAttributeByKey(DwarfAttributeKind.Name).ValueAsObject.ToString();
                     var typeRef = variableDIE.FindAttributeByKey(DwarfAttributeKind.Type).ValueAsObject as DwarfDIE;
-                    var typeName = (typeRef.FindAttributeByKey(DwarfAttributeKind.Name)?.ValueAsObject.ToString()) ?? typeRef.Tag.ToString();
-                    textWriter2.WriteLine($"{fileName},{name},{typeName},\"{objectSymbols.FirstOrDefault(i => i.Name.Value == name).Value:X8}\"");
+                    typeRef = NavigateToBaseType(typeRef);
+                    var isPointerType = typeRef.Tag.Equals(DwarfTag.PointerType);
+                    var isArrayType = typeRef.Tag.Equals(DwarfTag.ArrayType);
+                    uint upperBound = 0;
+                    if(isArrayType) upperBound = typeRef.Children[0].FindAttributeByKey(DwarfAttributeKind.UpperBound).ValueAsU32 + 1;
+                    name = $"{name}{(isPointerType ? "*":"")}{(isArrayType ? "["+upperBound+"]" : "")}";
+                    var tagType = typeRef.Tag;
+                    var typeName = (typeRef.FindAttributeByKey(DwarfAttributeKind.Name)?.ValueAsObject.ToString()) ?? (isPointerType ? "unsigned long" : typeRef.Tag.ToString());
+                    
+                    if(typeRef.Tag.Equals(DwarfTag.StructureType) || typeRef.Tag.Equals(DwarfTag.UnionType)) {
+                       var members = GetStructureMembers(typeRef, name, objectSymbols.FirstOrDefault(i => i.Name.Value == name).Value);
+                       foreach(var (memberName,memTypeRef, offset) in members) {
+                            isPointerType = memTypeRef.Tag.Equals(DwarfTag.PointerType);
+                            typeName = (memTypeRef.FindAttributeByKey(DwarfAttributeKind.Name)?.ValueAsObject.ToString()) ?? (isPointerType ? "unsigned long" : typeRef.Tag.ToString());
+                            textWriter2.WriteLine($"{fileName},{memberName},{tagType},{typeName},\"{offset:X8}\"");
+                       }
+                    }
+                    else {
+                        textWriter2.WriteLine($"{fileName},{name},{tagType},{typeName},\"{objectSymbols.FirstOrDefault(i => i.Name.Value == name).Value:X8}\"");
+                    }
                 }
             }
             var variableDIES = dwarf.InfoSection.Units
