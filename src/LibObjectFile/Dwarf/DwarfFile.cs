@@ -366,12 +366,13 @@ namespace LibObjectFile.Dwarf
             CheckErrors(diagnostics);
         }
 
-        public static DwarfFile Read(DwarfReaderContext readerContext)
+        public static DwarfFile Read(DwarfReaderContext readerContext, out DiagnosticBag bag)
         {
             if (readerContext == null) throw new ArgumentNullException(nameof(readerContext));
 
+            bag = new DiagnosticBag();
             var dwarf = new DwarfFile();
-            var reader = new DwarfReader(readerContext, dwarf, new DiagnosticBag());
+            var reader = new DwarfReader(readerContext, dwarf, bag);
 
             reader.Log = null;
             reader.Stream = readerContext.DebugAbbrevStream;
@@ -426,15 +427,15 @@ namespace LibObjectFile.Dwarf
             return dwarf;
         }
 
-        public static DwarfFile ReadFromElf(DwarfElfContext elfContext)
+        public static DwarfFile ReadFromElf(DwarfElfContext elfContext, out DiagnosticBag bag)
         {
             if (elfContext == null) throw new ArgumentNullException(nameof(elfContext));
-            return Read(new DwarfReaderContext(elfContext));
+            return Read(new DwarfReaderContext(elfContext), out bag);
         }
 
-        public static DwarfFile ReadFromElf(ElfObjectFile elf)
+        public static DwarfFile ReadFromElf(ElfObjectFile elf, out DiagnosticBag bag)
         {
-            return ReadFromElf(new DwarfElfContext(elf));
+            return ReadFromElf(new DwarfElfContext(elf), out bag);
         }
 
         private static void CheckErrors(DiagnosticBag diagnostics)

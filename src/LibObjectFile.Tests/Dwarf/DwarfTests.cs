@@ -95,7 +95,7 @@ namespace LibObjectFile.Tests.Dwarf
             var elfContext = new DwarfElfContext(elf);
             var inputContext = new DwarfReaderContext(elfContext);
             inputContext.DebugLinePrinter = Console.Out;
-            var dwarf = DwarfFile.Read(inputContext);
+            var dwarf = DwarfFile.Read(inputContext, out DiagnosticBag _);
 
             inputContext.DebugLineStream.Position = 0;
 
@@ -129,7 +129,7 @@ namespace LibObjectFile.Tests.Dwarf
             reloadContext.DebugLineStream = outputContext.DebugLineStream;
             reloadContext.DebugLinePrinter = Console.Out;
 
-            var dwarf2 = DwarfFile.Read(reloadContext);
+            var dwarf2 = DwarfFile.Read(reloadContext, out DiagnosticBag _);
 
             var inputDebugLineBuffer = copyInputDebugLineStream.ToArray();
             var outputDebugLineBuffer = ((MemoryStream)reloadContext.DebugLineStream).ToArray();
@@ -154,7 +154,7 @@ namespace LibObjectFile.Tests.Dwarf
             var elfContext = new DwarfElfContext(elf);
             var inputContext = new DwarfReaderContext(elfContext);
             inputContext.DebugLinePrinter = Console.Out;
-            var dwarf = DwarfFile.Read(inputContext);
+            var dwarf = DwarfFile.Read(inputContext, out DiagnosticBag _);
 
             inputContext.DebugLineStream.Position = 0;
 
@@ -188,7 +188,7 @@ namespace LibObjectFile.Tests.Dwarf
             reloadContext.DebugLineStream = outputContext.DebugLineStream;
             reloadContext.DebugLinePrinter = Console.Out;
 
-            var dwarf2 = DwarfFile.Read(reloadContext);
+            var dwarf2 = DwarfFile.Read(reloadContext, out DiagnosticBag _);
 
             var inputDebugLineBuffer = copyInputDebugLineStream.ToArray();
             var outputDebugLineBuffer = ((MemoryStream)reloadContext.DebugLineStream).ToArray();
@@ -212,7 +212,7 @@ namespace LibObjectFile.Tests.Dwarf
             var elfContext = new DwarfElfContext(elf);
             var inputContext = new DwarfReaderContext(elfContext);
             inputContext.DebugLinePrinter = Console.Out;
-            var dwarf = DwarfFile.Read(inputContext);
+            var dwarf = DwarfFile.Read(inputContext, out DiagnosticBag _);
 
             inputContext.DebugLineStream.Position = 0;
             var copyInputDebugLineStream = new MemoryStream();
@@ -244,7 +244,7 @@ namespace LibObjectFile.Tests.Dwarf
             reloadContext.DebugLineStream = outputContext.DebugLineStream;
             reloadContext.DebugLinePrinter = Console.Out;
 
-            var dwarf2 = DwarfFile.Read(reloadContext);
+            var dwarf2 = DwarfFile.Read(reloadContext, out DiagnosticBag _);
 
             var inputDebugLineBuffer = copyInputDebugLineStream.ToArray();
             var outputDebugLineBuffer = ((MemoryStream)reloadContext.DebugLineStream).ToArray();
@@ -271,7 +271,7 @@ namespace LibObjectFile.Tests.Dwarf
             var elfContext = new DwarfElfContext(elf);
             var inputContext = new DwarfReaderContext(elfContext);
             inputContext.DebugLinePrinter = Console.Out;
-            var dwarf = DwarfFile.Read(inputContext);
+            var dwarf = DwarfFile.Read(inputContext, out DiagnosticBag _);
 
             inputContext.DebugLineStream.Position = 0;
             var copyInputDebugLineStream = new MemoryStream();
@@ -303,7 +303,7 @@ namespace LibObjectFile.Tests.Dwarf
             reloadContext.DebugLineStream = outputContext.DebugLineStream;
             reloadContext.DebugLinePrinter = Console.Out;
 
-            var dwarf2 = DwarfFile.Read(reloadContext);
+            var dwarf2 = DwarfFile.Read(reloadContext, out DiagnosticBag _);
 
             var inputDebugLineBuffer = copyInputDebugLineStream.ToArray();
             var outputDebugLineBuffer = ((MemoryStream)reloadContext.DebugLineStream).ToArray();
@@ -327,7 +327,7 @@ namespace LibObjectFile.Tests.Dwarf
 
             var elfContext = new DwarfElfContext(elf);
             var inputContext = new DwarfReaderContext(elfContext);
-            var dwarf = DwarfFile.Read(inputContext);
+            var dwarf = DwarfFile.Read(inputContext, out DiagnosticBag _);
 
             dwarf.AbbreviationTable.Print(Console.Out);
             dwarf.InfoSection.Print(Console.Out);
@@ -443,16 +443,16 @@ namespace LibObjectFile.Tests.Dwarf
         }
 
         DwarfDIE NavigateToBaseType(DwarfDIE die, int level = 0) {            
-            var foundBaseType = 
-                            die.Tag.Equals(DwarfTag.PointerType) ||
-                            die.Tag.Equals(DwarfTag.UnionType) ||
-                            die.Tag.Equals(DwarfTag.SubroutineType) ||
-                            die.Tag.Equals(DwarfTag.BaseType) ||
-                            die.Tag.Equals(DwarfTag.StructureType);
-            if(foundBaseType) return die;
+            if(die.Tag.Equals(DwarfTag.PointerType) ||
+                die.Tag.Equals(DwarfTag.UnionType) ||
+                die.Tag.Equals(DwarfTag.SubroutineType) ||
+                die.Tag.Equals(DwarfTag.BaseType) ||
+                die.Tag.Equals(DwarfTag.StructureType))
+                 return die;
 
             if (die.FindAttributeByKey(DwarfAttributeKind.Type)?.ValueAsObject is not DwarfDIE typeRef) 
-                throw new NullReferenceException($"{die.Tag} does not contain Type attribute");
+                return die; //just return the current die as the found type and let the client decide the resolution.
+                //throw new NullReferenceException($"{die.Tag} does not contain Type attribute");
             return NavigateToBaseType(typeRef, level + 1);
         }
 
@@ -464,13 +464,28 @@ namespace LibObjectFile.Tests.Dwarf
         /// <exception cref="NullReferenceException"></exception>
         DwarfDIE NavigateToByteSizeableType(DwarfDIE die) 
         {
-            if(die.Tag.Equals(DwarfTag.PointerType)) return die; //if pointer return itself so user can decide the size.
-            var foundBaseType = die.FindAttributeByKey(DwarfAttributeKind.ByteSize) is not null;
-            if(foundBaseType) return die;
-
-            if (die.FindAttributeByKey(DwarfAttributeKind.Type)?.ValueAsObject is not DwarfDIE typeRef) 
-                return die; //found the last type in the chain that does not reference another type.
+            if(die.Tag.Equals(DwarfTag.PointerType) || //if pointer return itself so user can decide the size.
+               die.Tag.Equals(DwarfTag.SubroutineType) || 
+               die.Tag.Equals(DwarfTag.Subprogram) ||
+               die.FindAttributeByKey(DwarfAttributeKind.ByteSize) is not null ||
+                //found the last type in the chain that does not reference another type.
+               die.FindAttributeByKey(DwarfAttributeKind.Type)?.ValueAsObject is not DwarfDIE typeRef) 
+            {
+               return die; 
+            }
+            
             return NavigateToByteSizeableType(typeRef);
+        }
+
+        uint GetByteSize(DwarfDIE die, uint pointerSize = 4) 
+        {
+            var typeWithByteSize = NavigateToByteSizeableType(die);
+            //this should not happen, but the lib can't parse some enumerations correctly, return size 1 for this cases (typedef types).
+            var typeSize = typeWithByteSize.FindAttributeByKey(DwarfAttributeKind.ByteSize)?.ValueAsU32 ?? (typeWithByteSize.Tag.Equals(DwarfTag.Typedef) ? 1u : pointerSize); //subrotine or pointer would not contain bytesize, and we default to 4 as size of 32bits address.
+            if(die is DwarfDIEArrayType)
+                return (die.Children[0].FindAttributeByKey(DwarfAttributeKind.UpperBound).ValueAsU32 + 1) * typeSize;
+            
+            return typeSize;
         }
 
         List<(string, DwarfDIE, ulong)> GetStructureMembers(DwarfDIE die, string parentMemberName, ulong offset, List<(string, DwarfDIE, ulong)> members = null) {            
@@ -534,20 +549,12 @@ namespace LibObjectFile.Tests.Dwarf
             return members;    
         }
 
-        uint GetByteSize(DwarfDIE die) 
-        {
-            var typeSize = NavigateToByteSizeableType(die).FindAttributeByKey(DwarfAttributeKind.ByteSize)?.ValueAsU32 ?? 4; //subrotine or pointer would not contain bytesize, and we default to 4 as size of 32bits address.
-            if(die is DwarfDIEArrayType) {
-                return (die.Children[0].FindAttributeByKey(DwarfAttributeKind.UpperBound).ValueAsU32 + 1) * typeSize;
-            }
 
-            return typeSize;
-        }
 
         [Test]
         public void FlatAllVariables()
         {
-            using var inStream = File.OpenRead("TestFiles/Hill_ACU_D.out");
+            using var inStream = File.OpenRead("TestFiles/SaturnIII_ACU_A.out");//Hill_ACU_D.out");
             ElfObjectFile.TryRead(inStream, out ElfObjectFile elf, out DiagnosticBag bag);
 
             var symbolTable = elf.Sections.FirstOrDefault(s => s is ElfSymbolTable) as ElfSymbolTable;
@@ -557,7 +564,7 @@ namespace LibObjectFile.Tests.Dwarf
             foreach (var symbol in objectSymbols.OrderBy(i => i.Name.Value)){
                 textWriter1.WriteLine($"{symbol.Value:x16} {symbol.Size,5} {symbol.Name.Value}");
             }
-            var dwarf = DwarfFile.ReadFromElf(elf);
+            var dwarf = DwarfFile.ReadFromElf(elf, out DiagnosticBag _);
             var compilationDIES = dwarf.InfoSection.Units
                 .Where(unit => unit.Root != null && unit.Root.Children.Count > 0)
                 .Select(unit => unit.Root);
@@ -570,19 +577,19 @@ namespace LibObjectFile.Tests.Dwarf
                     List<VariableEntry> variableList = new();                    
                     var fileName = Path.GetFileName(compilationDIE.FindAttributeByKey(DwarfAttributeKind.Name).ValueAsObject.ToString());
 
-                    var name = variableDIE.FindAttributeByKey(DwarfAttributeKind.Name).ValueAsObject.ToString();
+                    var originalName = variableDIE.FindAttributeByKey(DwarfAttributeKind.Name).ValueAsObject.ToString();
                     var typeRef = variableDIE.FindAttributeByKey(DwarfAttributeKind.Type).ValueAsObject as DwarfDIE;
                     typeRef = NavigateToBaseType(typeRef);
                     var isPointerType = typeRef.Tag.Equals(DwarfTag.PointerType);
                     var isArrayType = typeRef.Tag.Equals(DwarfTag.ArrayType);
                     uint upperBound = 0;
                     if(isArrayType) upperBound = typeRef.Children[0].FindAttributeByKey(DwarfAttributeKind.UpperBound).ValueAsU32 + 1;
-                    name = $"{name}{(isPointerType ? "*":"")}{(isArrayType ? "["+upperBound+"]" : "")}";
+                    var name = $"{originalName}{(isPointerType ? "*":"")}{(isArrayType ? "["+upperBound+"]" : "")}";
                     var tagType = typeRef.Tag;
                     var typeName = (typeRef.FindAttributeByKey(DwarfAttributeKind.Name)?.ValueAsObject.ToString()) ?? (isPointerType ? "unsigned long" : typeRef.Tag.ToString());
                     
                     if(typeRef.Tag.Equals(DwarfTag.StructureType) || typeRef.Tag.Equals(DwarfTag.UnionType)) {
-                       var members = GetStructureMembers(typeRef, name, objectSymbols.FirstOrDefault(i => i.Name.Value == name).Value);
+                       var members = GetStructureMembers(typeRef, name, objectSymbols.FirstOrDefault(i => i.Name.Value.TrimStart('_') == originalName).Value);
                        foreach(var (memberName,memTypeRef, offset) in members) {
                             isPointerType = memTypeRef.Tag.Equals(DwarfTag.PointerType);
                             typeName = (memTypeRef.FindAttributeByKey(DwarfAttributeKind.Name)?.ValueAsObject.ToString()) ?? (isPointerType ? "unsigned long" : typeRef.Tag.ToString());
@@ -590,7 +597,7 @@ namespace LibObjectFile.Tests.Dwarf
                        }
                     }
                     else {
-                        textWriter2.WriteLine($"{fileName},{name},{tagType},{typeName},\"{objectSymbols.FirstOrDefault(i => i.Name.Value == name).Value:X8}\"");
+                        textWriter2.WriteLine($"{fileName},{name},{tagType},{typeName},\"{objectSymbols.FirstOrDefault(i => i.Name.Value.TrimStart('_') == originalName).Value:X8}\"");
                     }
                 }
             }
@@ -614,9 +621,9 @@ namespace LibObjectFile.Tests.Dwarf
 
         [Test]
         public void ReadOutFile() {
-            using var inStream = File.OpenRead("TestFiles/Hill_ACU_D.out");
+            using var inStream = File.OpenRead("TestFiles/SaturnIII_ACU_A.out");
             ElfObjectFile.TryRead(inStream, out ElfObjectFile elf, out DiagnosticBag bag);
-            var dwarf = DwarfFile.ReadFromElf(elf);
+            var dwarf = DwarfFile.ReadFromElf(elf, out DiagnosticBag dbag);
             
             using (TextWriter textWriter = new StreamWriter("elf.txt"))
                 elf.Print(textWriter);
@@ -624,7 +631,13 @@ namespace LibObjectFile.Tests.Dwarf
             using (TextWriter textWriter = new StreamWriter("dwarf.txt"))
                 dwarf.InfoSection.Print(textWriter);
 
-            
+            using (TextWriter textWriter = new StreamWriter("bag.txt",false))
+                foreach(var message in bag.Messages)
+                    textWriter.WriteLine(message);
+            using (TextWriter textWriter = new StreamWriter("dbag.txt",false))
+                foreach(var message in dbag.Messages)
+                    textWriter.WriteLine(message);
+
             //dwarf.InfoSection.PrintRelocations(textWriter);
             //dwarf.AddressRangeTable.Print(textWriter);
         }
