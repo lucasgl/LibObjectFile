@@ -549,12 +549,23 @@ namespace LibObjectFile.Tests.Dwarf
             return members;    
         }
 
-
+        [Test]
+        public void FlatAllVariablesWithExtensions()
+        {
+            using var inStream = File.OpenRead("TestFiles/Hill_ACU_D.out");
+            ElfObjectFile.TryRead(inStream, out ElfObjectFile elf, out DiagnosticBag bag);
+            var variableEntries = elf.GetVariableEntries();
+            using TextWriter textWriter2 = new StreamWriter("varDefsExt.csv");
+            textWriter2.WriteLine($"File Name, Variable Name, Tag Type, Type Name, Offset");
+            foreach(var variableEntry in variableEntries){
+                textWriter2.WriteLine(variableEntry);
+            }
+        }
 
         [Test]
         public void FlatAllVariables()
         {
-            using var inStream = File.OpenRead("TestFiles/SaturnIII_ACU_A.out");//Hill_ACU_D.out");
+            using var inStream = File.OpenRead("TestFiles/Hill_ACU_D.out");
             ElfObjectFile.TryRead(inStream, out ElfObjectFile elf, out DiagnosticBag bag);
 
             var symbolTable = elf.Sections.FirstOrDefault(s => s is ElfSymbolTable) as ElfSymbolTable;
