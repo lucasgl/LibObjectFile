@@ -92,13 +92,12 @@ namespace LibObjectFile.Dwarf
                 return false;
             }
 
-            code--;
-
             if (_mapItems.Count > 0)
             {
                 return _mapItems.TryGetValue(code, out item);
             }
 
+            code--;
             if (code < int.MaxValue && (int)code < _items.Count)
             {
                 item = _items[(int) code];

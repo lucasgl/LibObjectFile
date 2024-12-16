@@ -1,21 +1,21 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.1</TargetFrameworks>
+    <TargetFrameworks>net6.0</TargetFrameworks>
     <LangVersion>8.0</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <PropertyGroup>
     <Description>LibObjectFile is a .NET library to read, manipulate and write linker and executable object files (e.g ELF, ar, DWARF, COFF...)</Description>
-    <Copyright>Alexandre Mutel</Copyright>
+    <Copyright>Alexandre Mutel;Lucas Locatelli</Copyright>
     <NeutralLanguage>en-US</NeutralLanguage>
-    <Authors>Alexandre Mutel</Authors>
+    <Authors>Alexandre Mutel;Lucas Locatelli</Authors>
     <PackageTags>ELF DWARF ar archive objectfile</PackageTags>
     <PackageLicenseExpression>BSD-2-Clause</PackageLicenseExpression>
     <PackageReadmeFile>readme.md</PackageReadmeFile>
     <PackageIcon>logo.png</PackageIcon>
-    <PackageProjectUrl>https://github.com/xoofx/LibObjectFile</PackageProjectUrl>
+    <PackageProjectUrl>https://github.com/lucasgl/LibObjectFile</PackageProjectUrl>
     <!--Add support for sourcelink-->
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>

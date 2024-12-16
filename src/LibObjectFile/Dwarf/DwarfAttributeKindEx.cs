@@ -54,7 +54,7 @@ namespace LibObjectFile.Dwarf
 
         public override string ToString()
         {
-            return ToStringInternal() ?? $"Unknown {nameof(DwarfAttributeKindEx)} (0x{Value:X4})";
+            return ToStringInternal() ?? $"Unknown {nameof(DwarfAttributeKindEx)} (0x{Value:X})";
         }
 
         public static explicit operator uint(DwarfAttributeKindEx kind) => (uint)kind.Value;
